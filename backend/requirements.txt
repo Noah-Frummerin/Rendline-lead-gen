@@ -1,3 +1,5 @@
+Flask
+Flask-Cors
+Flask-SQLAlchemy
 requests
 email-validator
-Flask

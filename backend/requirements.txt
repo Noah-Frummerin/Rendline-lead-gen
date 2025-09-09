@@ -1,2 +1,3 @@
 requests
 email-validator
+Flask

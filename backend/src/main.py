@@ -1,49 +1,54 @@
-import os
-import sys
-# DON'T CHANGE THIS !!!
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-
-from flask import Flask, send_from_directory
+# main.py
+from flask import Flask
 from flask_cors import CORS
-from src.models.user import db
-from src.models.company import Company, Contact, EmailCampaign
-from src.routes.user import user_bp
-from src.routes.leads import leads_bp
-from src.routes.validation import validation_bp
-from src.routes.campaigns import campaigns_bp
+from flask_sqlalchemy import SQLAlchemy
+import os
 
-app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
-CORS(app)  # Enable CORS for all routes
-app.config['SECRET_KEY'] = 'asdf#FGSgvasgf$5$WGT'
+# Create a Flask app instance
+app = Flask(__name__)
+CORS(app)
 
-app.register_blueprint(user_bp, url_prefix='/api')
+# Use an environment variable for the database path,
+# falling back to a default for local development.
+# On Render, the `_render` directory is writable.
+# On other platforms, /tmp is a common writable location.
+DATABASE_PATH = os.environ.get('DATABASE_PATH', os.path.join(os.getcwd(), 'db.sqlite'))
+
+# Configure the SQLAlchemy database connection
+app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DATABASE_PATH}'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Initialize the database extension
+db = SQLAlchemy(app)
+
+# Import models to ensure they are registered with SQLAlchemy
+from .models.company import Company
+from .models.user import User
+
+# Import and register blueprints
+from .routes.campaigns import campaigns_bp
+from .routes.leads import leads_bp
+from .routes.validation import validation_bp
+from .routes.auth import auth_bp
+from .routes.companies import companies_bp
+
+app.register_blueprint(campaigns_bp, url_prefix='/api/campaigns')
 app.register_blueprint(leads_bp, url_prefix='/api/leads')
 app.register_blueprint(validation_bp, url_prefix='/api/validation')
-app.register_blueprint(campaigns_bp, url_prefix='/api/campaigns')
+app.register_blueprint(auth_bp, url_prefix='/api/auth')
+app.register_blueprint(companies_bp, url_prefix='/api/companies')
 
-# uncomment if you need to use database
-app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(os.path.dirname(__file__), 'database', 'app.db')}"
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db.init_app(app)
-with app.app_context():
+# A basic route to check if the API is running
+@app.route('/')
+def home():
+    return "API is running"
+
+# Create database tables before the first request
+@app.before_first_request
+def create_tables():
     db.create_all()
 
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def serve(path):
-    static_folder_path = app.static_folder
-    if static_folder_path is None:
-            return "Static folder not configured", 404
-
-    if path != "" and os.path.exists(os.path.join(static_folder_path, path)):
-        return send_from_directory(static_folder_path, path)
-    else:
-        index_path = os.path.join(static_folder_path, 'index.html')
-        if os.path.exists(index_path):
-            return send_from_directory(static_folder_path, 'index.html')
-        else:
-            return "index.html not found", 404
-
-
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # Use environment variable for port in production
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)

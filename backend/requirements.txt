@@ -3,3 +3,5 @@ Flask-Cors
 Flask-SQLAlchemy
 requests
 email-validator
+python-dotenv
+dnspython

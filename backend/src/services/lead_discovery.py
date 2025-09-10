@@ -1,6 +1,7 @@
 import requests
 import json
 import time
+import os
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
 import logging
@@ -17,36 +18,36 @@ class LeadDiscoveryService:
     """
     
     def __init__(self, apollo_api_key: Optional[str] = None, builtwith_api_key: Optional[str] = None):
-        self.apollo_api_key = apollo_api_key
-        self.builtwith_api_key = builtwith_api_key
+        self.apollo_api_key = apollo_api_key or os.getenv('APOLLO_API_KEY')
+        self.builtwith_api_key = builtwith_api_key or os.getenv('BUILTWITH_API_KEY')
         self.apollo_base_url = "https://api.apollo.io/v1"
         self.builtwith_base_url = "https://api.builtwith.com"
+        self.rate_limit_delay = 1.5  # seconds between API calls
         
     def find_companies_hiring_marketers(self, limit: int = 50) -> List[Dict]:
         """
         Find companies that are currently hiring marketing/sales professionals.
-        This indicates they're investing in growth and may need a new website.
         """
         companies = []
         
-        # Marketing job titles that indicate growth investment
         marketing_titles = [
             "Marketing Manager",
             "Head of Marketing", 
             "VP Marketing",
             "Growth Manager",
-            "Digital Marketing Manager",
-            "Marketing Director",
-            "Head of Growth",
-            "VP Growth"
+            "Digital Marketing Manager"
         ]
         
-        for title in marketing_titles[:3]:  # Limit to avoid rate limits
+        for title in marketing_titles[:3]:
             try:
-                # Simulate Apollo API call (replace with actual API when keys are available)
-                companies_batch = self._mock_apollo_hiring_search(title, limit // len(marketing_titles))
+                if self.apollo_api_key:
+                    companies_batch = self._apollo_hiring_search(title, limit // len(marketing_titles))
+                else:
+                    logger.warning("No Apollo API key found, using mock data")
+                    companies_batch = self._mock_apollo_hiring_search(title, limit // len(marketing_titles))
+                
                 companies.extend(companies_batch)
-                time.sleep(1)  # Rate limiting
+                time.sleep(self.rate_limit_delay)
             except Exception as e:
                 logger.error(f"Error searching for {title}: {str(e)}")
                 
@@ -55,13 +56,15 @@ class LeadDiscoveryService:
     def find_recently_funded_companies(self, days_back: int = 30, limit: int = 50) -> List[Dict]:
         """
         Find companies that received funding in the last N days.
-        These companies have budget and need to upgrade their online presence.
         """
         companies = []
         
         try:
-            # Simulate funding data search (replace with actual Crunchbase API)
-            companies = self._mock_funding_search(days_back, limit)
+            if self.apollo_api_key:
+                companies = self._apollo_funding_search(days_back, limit)
+            else:
+                logger.warning("No Apollo API key found, using mock data")
+                companies = self._mock_funding_search(days_back, limit)
         except Exception as e:
             logger.error(f"Error searching for funded companies: {str(e)}")
             
@@ -69,25 +72,28 @@ class LeadDiscoveryService:
     
     def find_companies_with_outdated_tech(self, limit: int = 50) -> List[Dict]:
         """
-        Find companies using outdated web technologies that indicate
-        they need a website refresh.
+        Find companies using outdated web technologies.
         """
         companies = []
         
-        # Technologies that indicate an outdated website
         outdated_techs = [
-            "jQuery 1.x",  # Very old jQuery versions
-            "Flash",       # Deprecated technology
-            "Internet Explorer",  # IE-specific code
-            "Bootstrap 2", # Very old Bootstrap
+            "jQuery 1.x",
+            "Flash",
+            "Internet Explorer",
+            "Bootstrap 2"
         ]
         
         try:
-            # Simulate BuiltWith API search
-            for tech in outdated_techs[:2]:  # Limit searches
-                companies_batch = self._mock_builtwith_search(tech, limit // len(outdated_techs))
-                companies.extend(companies_batch)
-                time.sleep(1)
+            if self.builtwith_api_key:
+                for tech in outdated_techs[:2]:
+                    companies_batch = self._builtwith_search(tech, limit // len(outdated_techs))
+                    companies.extend(companies_batch)
+                    time.sleep(self.rate_limit_delay)
+            else:
+                logger.warning("No BuiltWith API key found, using mock data")
+                for tech in outdated_techs[:2]:
+                    companies_batch = self._mock_builtwith_search(tech, limit // len(outdated_techs))
+                    companies.extend(companies_batch)
         except Exception as e:
             logger.error(f"Error searching for outdated tech: {str(e)}")
             
@@ -95,11 +101,10 @@ class LeadDiscoveryService:
     
     def find_decision_makers(self, company_domain: str, company_size: int) -> List[Dict]:
         """
-        Find decision-makers at a company based on company size and domain.
+        Find decision-makers at a company.
         """
         contacts = []
         
-        # Determine target titles based on company size
         if company_size <= 50:
             target_titles = ["Founder", "CEO", "Co-Founder", "Owner"]
         elif company_size <= 200:
@@ -108,55 +113,264 @@ class LeadDiscoveryService:
             target_titles = ["Head of Marketing", "Marketing Director", "VP Marketing", "Chief Marketing Officer"]
             
         try:
-            # Simulate Apollo contact search
-            contacts = self._mock_apollo_contact_search(company_domain, target_titles)
+            if self.apollo_api_key:
+                contacts = self._apollo_contact_search(company_domain, target_titles)
+            else:
+                logger.warning("No Apollo API key found, using mock data")
+                contacts = self._mock_apollo_contact_search(company_domain, target_titles)
         except Exception as e:
             logger.error(f"Error finding contacts for {company_domain}: {str(e)}")
             
         return contacts
     
+    def _apollo_hiring_search(self, job_title: str, limit: int) -> List[Dict]:
+        """
+        Real Apollo API search for companies hiring specific roles.
+        """
+        if not self.apollo_api_key:
+            raise ValueError("Apollo API key required")
+        
+        headers = {
+            'Cache-Control': 'no-cache',
+            'Content-Type': 'application/json',
+            'X-Api-Key': self.apollo_api_key
+        }
+        
+        payload = {
+            "api_key": self.apollo_api_key,
+            "q_organization_keyword_tags": ["Hiring", "Growing", "Expanding"],
+            "person_titles": [job_title],
+            "per_page": limit,
+            "page": 1
+        }
+        
+        try:
+            response = requests.post(
+                f"{self.apollo_base_url}/mixed_people/search",
+                json=payload,
+                headers=headers,
+                timeout=30
+            )
+            
+            if response.status_code == 429:
+                retry_after = int(response.headers.get('Retry-After', 60))
+                logger.warning(f"Rate limited, waiting {retry_after} seconds")
+                time.sleep(retry_after)
+                return []
+            
+            if response.status_code != 200:
+                logger.error(f"Apollo API error: {response.status_code} - {response.text}")
+                return []
+            
+            data = response.json()
+            companies = []
+            
+            for person in data.get('people', []):
+                org = person.get('organization', {})
+                if org and org.get('name'):
+                    company_data = {
+                        "name": org.get('name'),
+                        "domain": org.get('website_url', '').replace('http://', '').replace('https://', '').replace('www.', ''),
+                        "industry": org.get('industry'),
+                        "employee_count": org.get('estimated_num_employees', 50),
+                        "trigger_type": "hiring",
+                        "trigger_details": f"Currently hiring: {job_title}",
+                        "website_url": org.get('website_url')
+                    }
+                    companies.append(company_data)
+            
+            return companies
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Apollo API request error: {str(e)}")
+            return []
+    
+    def _apollo_funding_search(self, days_back: int, limit: int) -> List[Dict]:
+        """
+        Search for recently funded companies using Apollo API.
+        """
+        if not self.apollo_api_key:
+            raise ValueError("Apollo API key required")
+        
+        headers = {
+            'Cache-Control': 'no-cache',
+            'Content-Type': 'application/json',
+            'X-Api-Key': self.apollo_api_key
+        }
+        
+        # Calculate date range
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=days_back)
+        
+        payload = {
+            "api_key": self.apollo_api_key,
+            "q_organization_funding_stage_list": ["Seed", "Series A", "Series B", "Series C"],
+            "per_page": limit,
+            "page": 1
+        }
+        
+        try:
+            response = requests.post(
+                f"{self.apollo_base_url}/organizations/search",
+                json=payload,
+                headers=headers,
+                timeout=30
+            )
+            
+            if response.status_code != 200:
+                logger.error(f"Apollo funding search error: {response.status_code}")
+                return self._mock_funding_search(days_back, limit)
+            
+            data = response.json()
+            companies = []
+            
+            for org in data.get('organizations', []):
+                company_data = {
+                    "name": org.get('name'),
+                    "domain": org.get('website_url', '').replace('http://', '').replace('https://', '').replace('www.', ''),
+                    "industry": org.get('industry'),
+                    "employee_count": org.get('estimated_num_employees', 50),
+                    "funding_stage": org.get('funding_stage'),
+                    "recent_funding_amount": org.get('latest_funding_amount'),
+                    "trigger_type": "funding",
+                    "trigger_details": f"Recently received {org.get('funding_stage', 'funding')}"
+                }
+                companies.append(company_data)
+            
+            return companies
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Apollo funding API error: {str(e)}")
+            return self._mock_funding_search(days_back, limit)
+    
+    def _apollo_contact_search(self, domain: str, titles: List[str]) -> List[Dict]:
+        """
+        Real Apollo contact search.
+        """
+        if not self.apollo_api_key:
+            raise ValueError("Apollo API key required")
+        
+        headers = {
+            'Cache-Control': 'no-cache',
+            'Content-Type': 'application/json',
+            'X-Api-Key': self.apollo_api_key
+        }
+        
+        payload = {
+            "api_key": self.apollo_api_key,
+            "q_organization_domains": [domain],
+            "person_titles": titles,
+            "per_page": 5,
+            "page": 1
+        }
+        
+        try:
+            response = requests.post(
+                f"{self.apollo_base_url}/mixed_people/search",
+                json=payload,
+                headers=headers,
+                timeout=30
+            )
+            
+            if response.status_code != 200:
+                logger.error(f"Apollo contact search error: {response.status_code}")
+                return self._mock_apollo_contact_search(domain, titles)
+            
+            data = response.json()
+            contacts = []
+            
+            for person in data.get('people', []):
+                if person.get('email'):
+                    contact_data = {
+                        "first_name": person.get('first_name', ''),
+                        "last_name": person.get('last_name', ''),
+                        "email": person.get('email'),
+                        "job_title": person.get('title', ''),
+                        "linkedin_url": person.get('linkedin_url')
+                    }
+                    contacts.append(contact_data)
+            
+            return contacts[:3]  # Limit to top 3 contacts
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Apollo contact API error: {str(e)}")
+            return self._mock_apollo_contact_search(domain, titles)
+    
+    def _builtwith_search(self, technology: str, limit: int) -> List[Dict]:
+        """
+        Real BuiltWith API search for companies using specific technologies.
+        """
+        if not self.builtwith_api_key:
+            raise ValueError("BuiltWith API key required")
+        
+        # BuiltWith API endpoint for technology lookup
+        url = f"{self.builtwith_base_url}/v17/api.json"
+        params = {
+            'KEY': self.builtwith_api_key,
+            'LOOKUP': technology,
+            'NOMETA': 'yes',
+            'NOATTR': 'yes'
+        }
+        
+        try:
+            response = requests.get(url, params=params, timeout=30)
+            
+            if response.status_code != 200:
+                logger.error(f"BuiltWith API error: {response.status_code}")
+                return self._mock_builtwith_search(technology, limit)
+            
+            data = response.json()
+            companies = []
+            
+            # Process BuiltWith response (structure varies)
+            results = data.get('Results', [])
+            for result in results[:limit]:
+                domain = result.get('Domain', '')
+                if domain:
+                    company_data = {
+                        "name": domain.replace('.com', '').replace('.', ' ').title(),
+                        "domain": domain,
+                        "industry": "Technology",  # Default, could be enhanced
+                        "employee_count": 100,  # Default estimate
+                        "website_technologies": json.dumps([technology]),
+                        "trigger_type": "outdated_tech",
+                        "trigger_details": f"Website uses outdated technology: {technology}"
+                    }
+                    companies.append(company_data)
+            
+            return companies
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"BuiltWith API error: {str(e)}")
+            return self._mock_builtwith_search(technology, limit)
+    
+    # Keep existing mock methods as fallbacks...
     def _mock_apollo_hiring_search(self, job_title: str, limit: int) -> List[Dict]:
-        """
-        Mock Apollo API search for companies hiring specific roles.
-        Replace with actual Apollo API calls when API key is available.
-        """
-        # Simulate realistic company data
+        """Mock data for development/testing."""
         mock_companies = [
             {
-                "name": f"TechCorp Solutions",
-                "domain": "techcorp-solutions.com",
+                "name": f"TechCorp Solutions {job_title[:3]}",
+                "domain": f"techcorp-{job_title.lower().replace(' ', '-')}.com",
                 "industry": "Software",
                 "employee_count": 75,
                 "trigger_type": "hiring",
                 "trigger_details": f"Currently hiring: {job_title}",
-                "website_url": "https://techcorp-solutions.com"
+                "website_url": f"https://techcorp-{job_title.lower().replace(' ', '-')}.com"
             },
             {
-                "name": f"GrowthStart Inc",
-                "domain": "growthstart.io",
+                "name": f"GrowthStart {job_title[:5]}",
+                "domain": f"growthstart-{job_title.lower().replace(' ', '-')}.io",
                 "industry": "SaaS",
                 "employee_count": 25,
                 "trigger_type": "hiring", 
                 "trigger_details": f"Currently hiring: {job_title}",
-                "website_url": "https://growthstart.io"
-            },
-            {
-                "name": f"ScaleUp Ventures",
-                "domain": "scaleup-ventures.com",
-                "industry": "E-commerce",
-                "employee_count": 150,
-                "trigger_type": "hiring",
-                "trigger_details": f"Currently hiring: {job_title}",
-                "website_url": "https://scaleup-ventures.com"
+                "website_url": f"https://growthstart-{job_title.lower().replace(' ', '-')}.io"
             }
         ]
-        
         return mock_companies[:limit]
     
     def _mock_funding_search(self, days_back: int, limit: int) -> List[Dict]:
-        """
-        Mock funding data search. Replace with actual Crunchbase API.
-        """
+        """Mock funding data."""
         mock_companies = [
             {
                 "name": "FundedStartup AI",
@@ -181,40 +395,25 @@ class LeadDiscoveryService:
                 "trigger_details": "Raised $2M Seed round 8 days ago"
             }
         ]
-        
         return mock_companies[:limit]
     
     def _mock_builtwith_search(self, technology: str, limit: int) -> List[Dict]:
-        """
-        Mock BuiltWith API search. Replace with actual BuiltWith API.
-        """
+        """Mock BuiltWith data."""
         mock_companies = [
             {
-                "name": "LegacyTech Corp",
-                "domain": "legacytech.com",
+                "name": f"LegacyTech Corp ({technology})",
+                "domain": f"legacytech-{technology.lower().replace(' ', '-').replace('.', '')}.com",
                 "industry": "Manufacturing",
                 "employee_count": 200,
                 "website_technologies": json.dumps([technology, "Apache", "PHP"]),
                 "trigger_type": "outdated_tech",
                 "trigger_details": f"Website uses outdated technology: {technology}"
-            },
-            {
-                "name": "OldSchool Industries",
-                "domain": "oldschool-industries.net",
-                "industry": "Consulting", 
-                "employee_count": 80,
-                "website_technologies": json.dumps([technology, "IIS", "ASP.NET"]),
-                "trigger_type": "outdated_tech",
-                "trigger_details": f"Website uses outdated technology: {technology}"
             }
         ]
-        
         return mock_companies[:limit]
     
     def _mock_apollo_contact_search(self, domain: str, titles: List[str]) -> List[Dict]:
-        """
-        Mock Apollo contact search. Replace with actual Apollo API.
-        """
+        """Mock contact data."""
         mock_contacts = [
             {
                 "first_name": "Sarah",
@@ -231,44 +430,33 @@ class LeadDiscoveryService:
                 "linkedin_url": f"https://linkedin.com/in/mike-chen-{domain.split('.')[0]}"
             }
         ]
-        
-        return mock_contacts[:2]  # Limit to avoid overwhelming
+        return mock_contacts[:2]
     
     def calculate_decision_maker_score(self, job_title: str, company_size: int) -> float:
-        """
-        Calculate a score (0-1) for how likely someone is to be a decision-maker
-        for website redesign projects based on their title and company size.
-        """
+        """Calculate decision-maker score (0-1)."""
         title_lower = job_title.lower()
         
-        # High-priority titles
         if any(keyword in title_lower for keyword in ['ceo', 'founder', 'owner', 'president']):
             if company_size <= 50:
                 return 0.95
             elif company_size <= 200:
                 return 0.75
             else:
-                return 0.4  # CEOs of large companies rarely make website decisions
+                return 0.4
                 
-        # Marketing leadership titles
         if any(keyword in title_lower for keyword in ['head of marketing', 'marketing director', 'vp marketing', 'cmo']):
             return 0.9
             
-        # Growth/digital titles
         if any(keyword in title_lower for keyword in ['head of growth', 'growth director', 'digital marketing']):
             return 0.85
             
-        # General marketing titles
         if 'marketing manager' in title_lower:
             if company_size <= 100:
                 return 0.7
             else:
                 return 0.5
                 
-        # Sales leadership (sometimes involved in website decisions)
         if any(keyword in title_lower for keyword in ['head of sales', 'sales director', 'vp sales']):
             return 0.6
             
-        # Default for other titles
         return 0.2
-

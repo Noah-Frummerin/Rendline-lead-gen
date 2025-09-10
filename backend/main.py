@@ -31,7 +31,14 @@ app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
 # Configure the database connection string from an environment variable
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_PATH', 'sqlite:///leads.db')
+db_path = os.environ.get('DATABASE_PATH')
+if not db_path:
+    db_path = 'sqlite:///leads.db'
+    logger.warning("DATABASE_PATH environment variable not found. Using default: sqlite:///leads.db")
+else:
+    logger.info(f"Using DATABASE_PATH from environment: {db_path}")
+
+app.config['SQLALCHEMY_DATABASE_URI'] = db_path
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Initialize the database with the Flask app

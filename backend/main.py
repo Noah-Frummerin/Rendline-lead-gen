@@ -14,14 +14,14 @@ from flask_cors import CORS
 from src.routes.leads import leads_bp
 from src.routes.companies import companies_bp
 from src.routes.campaigns import campaigns_bp
-from src.routes.users import users_bp
+from src.routes.user import user_bp  # Corrected line
 from src.models.user import db as user_db
 from src.models.company import db as company_db
 from src.services.email_generator import email_generator_bp
 from src.services.email_sender import email_sender_bp
 from src.services.email_validation import email_validation_bp
 from src.services.lead_discovery import lead_discovery_bp
-from src.validation import validation_bp
+from src.routes.validation import validation_bp # Corrected line
 
 # Configure logging
 logging.basicConfig(
@@ -46,7 +46,7 @@ company_db.init_app(app)
 app.register_blueprint(leads_bp, url_prefix='/leads')
 app.register_blueprint(companies_bp, url_prefix='/companies')
 app.register_blueprint(campaigns_bp, url_prefix='/campaigns')
-app.register_blueprint(users_bp, url_prefix='/users')
+app.register_blueprint(user_bp, url_prefix='/users') # Corrected line
 app.register_blueprint(email_generator_bp, url_prefix='/email-generator')
 app.register_blueprint(email_sender_bp, url_prefix='/email-sender')
 app.register_blueprint(email_validation_bp, url_prefix='/email-validation')
@@ -61,7 +61,7 @@ def home():
         "version": "1.0.0",
         "endpoints": [
             "/leads/discover",
-            "/leads/companies", 
+            "/leads/companies",
             "/campaigns/generate-emails",
             "/campaigns/send-emails",
             "/validation/validate-contacts"

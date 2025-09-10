@@ -14,7 +14,7 @@ import logging
 from src.routes.leads import leads_bp
 from src.routes.companies import companies_bp
 from src.routes.campaigns import campaigns_bp
-from src.routes.users import users_bp
+from src.routes.user import user_bp # Corrected import statement
 from src.routes.auth import auth_bp
 from src.validation import validation_bp
 
@@ -40,7 +40,7 @@ db.init_app(app)
 app.register_blueprint(leads_bp, url_prefix='/leads')
 app.register_blueprint(companies_bp, url_prefix='/companies')
 app.register_blueprint(campaigns_bp, url_prefix='/campaigns')
-app.register_blueprint(users_bp, url_prefix='/users')
+app.register_blueprint(user_bp, url_prefix='/users') # Corrected blueprint name
 app.register_blueprint(auth_bp, url_prefix='/auth')
 app.register_blueprint(validation_bp, url_prefix='/validation')
 

@@ -1,23 +1,22 @@
 import sys
 import os
 from dotenv import load_dotenv
-import logging
 
-# Load environment variables from the .env file
+# Load environment variables
 load_dotenv()
-
-# Add the 'src' directory to the Python path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 from flask import Flask, jsonify
 from flask_cors import CORS
+from src.models.user import db
+import logging
+
+# Import blueprints from the correct locations
 from src.routes.leads import leads_bp
 from src.routes.companies import companies_bp
 from src.routes.campaigns import campaigns_bp
-from src.routes.user import user_bp
-from src.models.user import db as user_db
-from src.models.company import db as company_db
-from src.routes.validation import validation_bp
+from src.routes.users import users_bp
+from src.routes.auth import auth_bp
+from src.validation import validation_bp
 
 # Configure logging
 logging.basicConfig(
@@ -31,25 +30,18 @@ app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
 # Configure the database connection string from an environment variable
-db_path = os.environ.get('DATABASE_PATH')
-if not db_path:
-    db_path = 'sqlite:///leads.db'
-    logger.warning("DATABASE_PATH environment variable not found. Using default: sqlite:///leads.db")
-else:
-    logger.info(f"Using DATABASE_PATH from environment: {db_path}")
-
-app.config['SQLALCHEMY_DATABASE_URI'] = db_path
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_PATH', 'sqlite:///leads.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Initialize the database with the Flask app
-user_db.init_app(app)
-company_db.init_app(app)
+db.init_app(app)
 
-# Register blueprints for different parts of the API
+# Register blueprints
 app.register_blueprint(leads_bp, url_prefix='/leads')
 app.register_blueprint(companies_bp, url_prefix='/companies')
 app.register_blueprint(campaigns_bp, url_prefix='/campaigns')
-app.register_blueprint(user_bp, url_prefix='/users')
+app.register_blueprint(users_bp, url_prefix='/users')
+app.register_blueprint(auth_bp, url_prefix='/auth')
 app.register_blueprint(validation_bp, url_prefix='/validation')
 
 # Root endpoint
@@ -72,15 +64,14 @@ def home():
 def health():
     return jsonify({
         "status": "healthy",
-        "database": "connected" if user_db.engine else "disconnected"
+        "database": "connected" if db.engine else "disconnected"
     })
 
 if __name__ == '__main__':
     with app.app_context():
         try:
             # Create database tables
-            user_db.create_all()
-            company_db.create_all()
+            db.create_all()
             logger.info("Database tables created successfully")
         except Exception as e:
             logger.error(f"Error creating database tables: {str(e)}")
@@ -89,5 +80,5 @@ if __name__ == '__main__':
     debug_mode = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true'
     port = int(os.environ.get('PORT', 8000))
     
-    logger.info(f"Starting app with debug={debug_mode} on port {port}")
-    app.run(host='0.0.0.0', debug=debug_mode, port=port)
+    logger.info(f"Starting application in {'debug' if debug_mode else 'production'} mode on port {port}")
+    app.run(debug=debug_mode, host='0.0.0.0', port=port)

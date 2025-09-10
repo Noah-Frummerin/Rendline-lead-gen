@@ -1,49 +1,54 @@
-import os
 import sys
-# DON'T CHANGE THIS !!!
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+import os
 
-from flask import Flask, send_from_directory
+# Add the 'src' directory to the Python path
+sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+
+from flask import Flask
 from flask_cors import CORS
-from src.models.user import db
-from src.models.company import Company, Contact, EmailCampaign
-from src.routes.user import user_bp
 from src.routes.leads import leads_bp
-from src.routes.validation import validation_bp
+from src.routes.companies import companies_bp
 from src.routes.campaigns import campaigns_bp
+from src.routes.users import users_bp
+from src.models.user import db as user_db
+from src.models.company import db as company_db
+from src.services.email_generator import email_generator_bp
+from src.services.email_sender import email_sender_bp
+from src.services.email_validation import email_validation_bp
+from src.services.lead_discovery import lead_discovery_bp
+from src.validation import validation_bp
 
-app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
-CORS(app)  # Enable CORS for all routes
-app.config['SECRET_KEY'] = 'asdf#FGSgvasgf$5$WGT'
+# Initialize the Flask application
+app = Flask(__name__)
+CORS(app) # Enable CORS for all routes
 
-app.register_blueprint(user_bp, url_prefix='/api')
-app.register_blueprint(leads_bp, url_prefix='/api/leads')
-app.register_blueprint(validation_bp, url_prefix='/api/validation')
-app.register_blueprint(campaigns_bp, url_prefix='/api/campaigns')
+# Configure the database connection string from an environment variable
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_PATH')
 
-# uncomment if you need to use database
-app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(os.path.dirname(__file__), 'database', 'app.db')}"
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db.init_app(app)
-with app.app_context():
-    db.create_all()
+# Initialize the database with the Flask app
+user_db.init_app(app)
+company_db.init_app(app)
 
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def serve(path):
-    static_folder_path = app.static_folder
-    if static_folder_path is None:
-            return "Static folder not configured", 404
+# Register blueprints for different parts of the API
+app.register_blueprint(leads_bp, url_prefix='/leads')
+app.register_blueprint(companies_bp, url_prefix='/companies')
+app.register_blueprint(campaigns_bp, url_prefix='/campaigns')
+app.register_blueprint(users_bp, url_prefix='/users')
+app.register_blueprint(email_generator_bp, url_prefix='/email-generator')
+app.register_blueprint(email_sender_bp, url_prefix='/email-sender')
+app.register_blueprint(email_validation_bp, url_prefix='/email-validation')
+app.register_blueprint(lead_discovery_bp, url_prefix='/lead-discovery')
+app.register_blueprint(validation_bp, url_prefix='/validation')
 
-    if path != "" and os.path.exists(os.path.join(static_folder_path, path)):
-        return send_from_directory(static_folder_path, path)
-    else:
-        index_path = os.path.join(static_folder_path, 'index.html')
-        if os.path.exists(index_path):
-            return send_from_directory(static_folder_path, 'index.html')
-        else:
-            return "index.html not found", 404
-
+# Root endpoint
+@app.route('/')
+def home():
+    return "Welcome to the backend API!"
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    with app.app_context():
+        # You would typically not create tables in a production environment
+        # but this is useful for development.
+        user_db.create_all()
+        company_db.create_all()
+    app.run(debug=True, port=8000)
